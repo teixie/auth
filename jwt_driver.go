@@ -1,4 +1,4 @@
-package drivers
+package auth
 
 type JWTDriver struct {
 }
