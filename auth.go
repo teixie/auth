@@ -25,14 +25,27 @@ func (g guard) Check() gin.HandlerFunc {
 	}
 }
 
-var guards = make(map[string]*guard)
-
-func RegisterGuard(name string, driver string, config interface{}) {
-	guards[name] = &guard{
-		name: name,
+var (
+	guards  = make(map[string]*guard)
+	drivers = map[string]func(interface{}) interface{}{
+		JWTGuard: NewJWTDriver,
 	}
+)
+
+// Register guard.
+func RegisterGuard(name string, driver string, config interface{}) {
+	if _, ok := drivers[driver]; ok {
+		guards[name] = &guard{
+			name:   name,
+			driver: drivers[driver](config),
+		}
+		return
+	}
+
+	panic("driver not found")
 }
 
+// Get guard by name.
 func Guard(name string) *guard {
 	if _, ok := guards[name]; ok {
 		return guards[name]
