@@ -34,10 +34,10 @@ var (
 
 // Register guard.
 func RegisterGuard(name string, driver string, config interface{}) {
-	if _, ok := drivers[driver]; ok {
+	if handler, ok := drivers[driver]; ok {
 		guards[name] = &guard{
 			name:   name,
-			driver: drivers[driver](config),
+			driver: handler(config),
 		}
 		return
 	}
