@@ -3,12 +3,13 @@ package auth
 import (
 	"crypto/rsa"
 	"errors"
-	"github.com/teixie/auth/contracts"
 	"io/ioutil"
 	"strings"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/teixie/auth/contracts"
 	"github.com/teixie/hawking"
 )
 
@@ -56,6 +57,9 @@ var (
 	// ErrInvalidUserProvider indicates the the given user provider is invalid
 	ErrInvalidUserProvider = errors.New("user provider invalid")
 
+	// ErrTokenCreateFailed can be thrown if token create failed
+	ErrTokenCreateFailed = errors.New("jwt token create failed")
+
 	// Default tokenLookup
 	defaultTokenLookup = "header:Authorization"
 
@@ -67,6 +71,7 @@ type jwtDriver struct {
 	name             string
 	key              []byte
 	signingAlgorithm string
+	timeout          time.Duration
 	tokenLookup      string
 	tokenHeadName    string
 	privKeyFile      string
@@ -224,7 +229,7 @@ func (j *jwtDriver) getToken(c *gin.Context) (string, error) {
 		}
 	}
 
-	c.Set(j.name+":JWT_TOKEN", token)
+	c.Set(j.name+":TOKEN", token)
 
 	return token, err
 }
@@ -290,9 +295,50 @@ func (j *jwtDriver) Authenticate(c *gin.Context) interface{} {
 		return nil
 	}
 
-	c.Set(j.name+":JWT_PAYLOAD", claims)
+	c.Set(j.name+":PAYLOAD", claims)
 
 	return j.userProvider.(contracts.Provider).RetrieveById(claims["id"].(int64))
+}
+
+func (j *jwtDriver) signedString(token *jwt.Token) (string, error) {
+	var tokenString string
+	var err error
+	if j.usingPublicKeyAlgo() {
+		tokenString, err = token.SignedString(j.privKey)
+	} else {
+		tokenString, err = token.SignedString(j.key)
+	}
+	return tokenString, err
+}
+
+// createToken method that clients can use to get a jwt token.
+func (j *jwtDriver) createToken(user interface{}) (string, time.Time, error) {
+	token := jwt.New(jwt.GetSigningMethod(j.signingAlgorithm))
+	claims := token.Claims.(jwt.MapClaims)
+
+	expire := hawking.Now().Add(j.timeout)
+	claims["id"] = user.(contracts.Provider).GetId()
+	claims["exp"] = expire.Unix()
+	claims["orig_iat"] = hawking.Now().Unix()
+	tokenString, err := j.signedString(token)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return tokenString, expire.Time(), nil
+}
+
+func (j *jwtDriver) Login(c *gin.Context, user interface{}) error {
+	token, expire, err := j.createToken(user)
+	if err != nil {
+		return ErrTokenCreateFailed
+	}
+
+	c.Set(j.name, user)
+	c.Set(j.name+":TOKEN", token)
+	c.Set(j.name+":TOKEN_EXPIRE", expire)
+
+	return nil
 }
 
 func newJWTDriver(name string, config interface{}) interface{} {
@@ -301,6 +347,7 @@ func newJWTDriver(name string, config interface{}) interface{} {
 			name:             name,
 			key:              cfg.Key,
 			signingAlgorithm: cfg.SigningAlgorithm,
+			timeout:          cfg.Timeout,
 			tokenLookup:      cfg.TokenLookup,
 			tokenHeadName:    cfg.TokenHeadName,
 			privKeyFile:      cfg.PrivKeyFile,

@@ -51,6 +51,10 @@ func (g guard) Check() gin.HandlerFunc {
 	}
 }
 
+func (g guard) Login(c *gin.Context, user interface{}) error {
+	return g.driver.(contracts.Driver).Login(c, user)
+}
+
 func (g guard) user(c *gin.Context) interface{} {
 	if user, exists := c.Get(g.name); exists {
 		return user

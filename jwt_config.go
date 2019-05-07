@@ -1,5 +1,9 @@
 package auth
 
+import (
+	"time"
+)
+
 type JWTConfig struct {
 	// Secret key used for signing. Required.
 	Key []byte
@@ -7,6 +11,9 @@ type JWTConfig struct {
 	// signing algorithm - possible values are HS256, HS384, HS512
 	// Optional, default is HS256.
 	SigningAlgorithm string
+
+	// Duration that a jwt token is valid. Optional, defaults to one hour.
+	Timeout time.Duration
 
 	// TokenLookup is a string in the form of "<source>:<name>" that is used
 	// to extract token from the request.
