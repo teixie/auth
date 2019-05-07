@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rsa"
 	"errors"
+	"github.com/teixie/auth/contracts"
 	"io/ioutil"
 	"strings"
 
@@ -49,6 +50,12 @@ var (
 	// ErrInvalidPubKey indicates the the given public key is invalid
 	ErrInvalidPubKey = errors.New("public key invalid")
 
+	// ErrEmptyUserProvider can be thrown if user provider is empty
+	ErrEmptyUserProvider = errors.New("user provider is empty")
+
+	// ErrInvalidUserProvider indicates the the given user provider is invalid
+	ErrInvalidUserProvider = errors.New("user provider invalid")
+
 	// Default tokenLookup
 	defaultTokenLookup = "header:Authorization"
 
@@ -66,6 +73,7 @@ type jwtDriver struct {
 	pubKeyFile       string
 	privKey          *rsa.PrivateKey
 	pubKey           *rsa.PublicKey
+	userProvider     interface{}
 }
 
 func (j *jwtDriver) readKeys() error {
@@ -115,6 +123,14 @@ func (j *jwtDriver) usingPublicKeyAlgo() bool {
 }
 
 func (j *jwtDriver) Init() error {
+	if j.userProvider == nil {
+		return ErrEmptyUserProvider
+	}
+
+	if _, ok := j.userProvider.(contracts.Provider); !ok {
+		return ErrInvalidUserProvider
+	}
+
 	if j.tokenLookup == "" {
 		j.tokenLookup = "header:Authorization"
 	}
@@ -254,6 +270,14 @@ func (j *jwtDriver) Authenticate(c *gin.Context) interface{} {
 		return nil
 	}
 
+	if claims["id"] == nil {
+		return nil
+	}
+
+	if _, ok := claims["id"].(int64); !ok {
+		return nil
+	}
+
 	if claims["exp"] == nil {
 		return nil
 	}
@@ -268,7 +292,7 @@ func (j *jwtDriver) Authenticate(c *gin.Context) interface{} {
 
 	c.Set(j.name+":JWT_PAYLOAD", claims)
 
-	return nil
+	return j.userProvider.(contracts.Provider).RetrieveById(claims["id"].(int64))
 }
 
 func newJWTDriver(name string, config interface{}) interface{} {
@@ -281,6 +305,7 @@ func newJWTDriver(name string, config interface{}) interface{} {
 			tokenHeadName:    cfg.TokenHeadName,
 			privKeyFile:      cfg.PrivKeyFile,
 			pubKeyFile:       cfg.PubKeyFile,
+			userProvider:     cfg.UserProvider,
 		}
 		if err := driver.Init(); err != nil {
 			panic(err.Error())

@@ -25,4 +25,7 @@ type JWTConfig struct {
 
 	// Public key file for asymmetric algorithms
 	PubKeyFile string
+
+	// User provider
+	UserProvider interface{}
 }
