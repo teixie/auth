@@ -1,30 +1,292 @@
 package auth
 
 import (
+	"crypto/rsa"
+	"errors"
+	"io/ioutil"
+	"strings"
+
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/teixie/hawking"
+)
+
+// MapClaims type that uses the map[string]interface{} for JSON decoding
+// This is the default claims type if you don't supply one
+type MapClaims map[string]interface{}
+
+var (
+	// ErrMissingSecretKey indicates Secret key is required
+	ErrMissingSecretKey = errors.New("secret key is required")
+
+	// ErrInvalidSigningAlgorithm indicates signing algorithm is invalid, needs to be HS256, HS384, HS512, RS256, RS384 or RS512
+	ErrInvalidSigningAlgorithm = errors.New("invalid signing algorithm")
+
+	// ErrInvalidAuthHeader indicates auth header is invalid, could for example have the wrong Realm name
+	ErrInvalidAuthHeader = errors.New("auth header is invalid")
+
+	// ErrEmptyAuthHeader can be thrown if authing with a HTTP header, the Auth header needs to be set
+	ErrEmptyAuthHeader = errors.New("auth header is empty")
+
+	// ErrEmptyQueryToken can be thrown if authing with URL Query, the query token variable is empty
+	ErrEmptyQueryToken = errors.New("query token is empty")
+
+	// ErrEmptyCookieToken can be thrown if authing with a cookie, the token cookie is empty
+	ErrEmptyCookieToken = errors.New("cookie token is empty")
+
+	// ErrEmptyParamToken can be thrown if authing with parameter in path, the parameter in path is empty
+	ErrEmptyParamToken = errors.New("parameter token is empty")
+
+	// ErrNoPrivKeyFile indicates that the given private key is unreadable
+	ErrNoPrivKeyFile = errors.New("private key file unreadable")
+
+	// ErrNoPubKeyFile indicates that the given public key is unreadable
+	ErrNoPubKeyFile = errors.New("public key file unreadable")
+
+	// ErrInvalidPrivKey indicates that the given private key is invalid
+	ErrInvalidPrivKey = errors.New("private key invalid")
+
+	// ErrInvalidPubKey indicates the the given public key is invalid
+	ErrInvalidPubKey = errors.New("public key invalid")
+
+	// Default tokenLookup
+	defaultTokenLookup = "header:Authorization"
+
+	// Default tokenHeadName
+	defaultTokenHeadName = "Bearer"
 )
 
 type jwtDriver struct {
+	name             string
 	key              []byte
 	signingAlgorithm string
 	tokenLookup      string
+	tokenHeadName    string
+	privKeyFile      string
+	pubKeyFile       string
+	privKey          *rsa.PrivateKey
+	pubKey           *rsa.PublicKey
 }
 
-func (jd jwtDriver) Authenticate(c *gin.Context) interface{} {
+func (j *jwtDriver) readKeys() error {
+	err := j.privateKey()
+	if err != nil {
+		return err
+	}
+	err = j.publicKey()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func newJWTDriver(config interface{}) interface{} {
-	if cfg, ok := config.(*JWTConfig); ok {
-		if err := cfg.Validate(); err != nil {
-			panic(err.Error())
+func (j *jwtDriver) privateKey() error {
+	keyData, err := ioutil.ReadFile(j.privKeyFile)
+	if err != nil {
+		return ErrNoPrivKeyFile
+	}
+	key, err := jwt.ParseRSAPrivateKeyFromPEM(keyData)
+	if err != nil {
+		return ErrInvalidPrivKey
+	}
+	j.privKey = key
+	return nil
+}
+
+func (j *jwtDriver) publicKey() error {
+	keyData, err := ioutil.ReadFile(j.pubKeyFile)
+	if err != nil {
+		return ErrNoPubKeyFile
+	}
+	key, err := jwt.ParseRSAPublicKeyFromPEM(keyData)
+	if err != nil {
+		return ErrInvalidPubKey
+	}
+	j.pubKey = key
+	return nil
+}
+
+func (j *jwtDriver) usingPublicKeyAlgo() bool {
+	switch j.signingAlgorithm {
+	case "RS256", "RS512", "RS384":
+		return true
+	}
+	return false
+}
+
+func (j *jwtDriver) Init() error {
+	if j.tokenLookup == "" {
+		j.tokenLookup = "header:Authorization"
+	}
+
+	if j.signingAlgorithm == "" {
+		j.signingAlgorithm = "HS256"
+	}
+
+	j.tokenHeadName = strings.TrimSpace(j.tokenHeadName)
+	if len(j.tokenHeadName) == 0 {
+		j.tokenHeadName = "Bearer"
+	}
+
+	if j.usingPublicKeyAlgo() {
+		return j.readKeys()
+	}
+
+	if j.key == nil {
+		return ErrMissingSecretKey
+	}
+
+	return nil
+}
+
+func (j *jwtDriver) getTokenFromHeader(c *gin.Context, key string) (string, error) {
+	authHeader := c.Request.Header.Get(key)
+
+	if authHeader == "" {
+		return "", ErrEmptyAuthHeader
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if !(len(parts) == 2 && parts[0] == j.tokenHeadName) {
+		return "", ErrInvalidAuthHeader
+	}
+
+	return parts[1], nil
+}
+
+func (j *jwtDriver) getTokenFromQuery(c *gin.Context, key string) (string, error) {
+	token := c.Query(key)
+
+	if token == "" {
+		return "", ErrEmptyQueryToken
+	}
+
+	return token, nil
+}
+
+func (j *jwtDriver) getTokenFromCookie(c *gin.Context, key string) (string, error) {
+	cookie, _ := c.Cookie(key)
+
+	if cookie == "" {
+		return "", ErrEmptyCookieToken
+	}
+
+	return cookie, nil
+}
+
+func (j *jwtDriver) getTokenFromParam(c *gin.Context, key string) (string, error) {
+	token := c.Param(key)
+
+	if token == "" {
+		return "", ErrEmptyParamToken
+	}
+
+	return token, nil
+}
+
+func (j *jwtDriver) getToken(c *gin.Context) (string, error) {
+	var token string
+	var err error
+
+	methods := strings.Split(j.tokenLookup, ",")
+	for _, method := range methods {
+		if len(token) > 0 {
+			break
+		}
+		parts := strings.Split(strings.TrimSpace(method), ":")
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+		switch k {
+		case "header":
+			token, err = j.getTokenFromHeader(c, v)
+		case "query":
+			token, err = j.getTokenFromQuery(c, v)
+		case "cookie":
+			token, err = j.getTokenFromCookie(c, v)
+		case "param":
+			token, err = j.getTokenFromParam(c, v)
+		}
+	}
+
+	c.Set(j.name+":JWT_TOKEN", token)
+
+	return token, err
+}
+
+// Parse jwt token from gin context
+func (j *jwtDriver) parseToken(c *gin.Context) (*jwt.Token, error) {
+	token, err := j.getToken(c)
+	if err != nil {
+		return nil, err
+	}
+
+	return jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
+		if jwt.GetSigningMethod(j.signingAlgorithm) != t.Method {
+			return nil, ErrInvalidSigningAlgorithm
 		}
 
-		return &jwtDriver{
+		if j.usingPublicKeyAlgo() {
+			return j.pubKey, nil
+		}
+
+		return j.key, nil
+	})
+}
+
+// GetClaimsFromJWT get claims from JWT token
+func (j *jwtDriver) getClaimsFromJWT(c *gin.Context) (MapClaims, error) {
+	token, err := j.parseToken(c)
+	if err != nil {
+		return nil, err
+	}
+
+	claims := MapClaims{}
+	for key, value := range token.Claims.(jwt.MapClaims) {
+		claims[key] = value
+	}
+
+	return claims, nil
+}
+
+func (j *jwtDriver) Authenticate(c *gin.Context) interface{} {
+	claims, err := j.getClaimsFromJWT(c)
+	if err != nil {
+		return nil
+	}
+
+	if claims["exp"] == nil {
+		return nil
+	}
+
+	if _, ok := claims["exp"].(float64); !ok {
+		return nil
+	}
+
+	if int64(claims["exp"].(float64)) < hawking.Now().Unix() {
+		return nil
+	}
+
+	c.Set(j.name+":JWT_PAYLOAD", claims)
+
+	return nil
+}
+
+func newJWTDriver(name string, config interface{}) interface{} {
+	if cfg, ok := config.(*JWTConfig); ok {
+		driver := &jwtDriver{
+			name:             name,
 			key:              cfg.Key,
 			signingAlgorithm: cfg.SigningAlgorithm,
 			tokenLookup:      cfg.TokenLookup,
+			tokenHeadName:    cfg.TokenHeadName,
+			privKeyFile:      cfg.PrivKeyFile,
+			pubKeyFile:       cfg.PubKeyFile,
 		}
+		if err := driver.Init(); err != nil {
+			panic(err.Error())
+		}
+
+		return driver
 	}
 
 	panic("jwt driver config must be a pointer of JWTConfig type")

@@ -16,8 +16,13 @@ type JWTConfig struct {
 	// - "query:<name>"
 	// - "cookie:<name>"
 	TokenLookup string
-}
 
-func (jc *JWTConfig) Validate() error {
-	return nil
+	// TokenHeadName is a string in the header. Default value is "Bearer"
+	TokenHeadName string
+
+	// Private key file for asymmetric algorithms
+	PrivKeyFile string
+
+	// Public key file for asymmetric algorithms
+	PubKeyFile string
 }

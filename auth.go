@@ -13,7 +13,7 @@ const (
 
 var (
 	guards  = make(map[string]*guard)
-	drivers = map[string]func(interface{}) interface{}{
+	drivers = map[string]func(string, interface{}) interface{}{
 		JWTGuard: newJWTDriver,
 	}
 )
@@ -67,7 +67,7 @@ func RegisterGuard(name string, driver string, config interface{}) {
 	if handler, ok := drivers[driver]; ok {
 		guards[name] = &guard{
 			name:   name,
-			driver: handler(config),
+			driver: handler(name, config),
 		}
 		return
 	}
