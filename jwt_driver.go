@@ -1,12 +1,31 @@
 package auth
 
-type JWTDriver struct {
+import (
+	"github.com/gin-gonic/gin"
+)
+
+type jwtDriver struct {
+	key              []byte
+	signingAlgorithm string
+	tokenLookup      string
 }
 
-func NewJWTDriver(config interface{}) interface{} {
-	if _, ok := config.(*JWTConfig); !ok {
-		panic("jwt driver config must be a pointer of JWTConfig type")
+func (jd jwtDriver) Authenticate(c *gin.Context) interface{} {
+	return nil
+}
+
+func newJWTDriver(config interface{}) interface{} {
+	if cfg, ok := config.(*JWTConfig); ok {
+		if err := cfg.Validate(); err != nil {
+			panic(err.Error())
+		}
+
+		return &jwtDriver{
+			key:              cfg.Key,
+			signingAlgorithm: cfg.SigningAlgorithm,
+			tokenLookup:      cfg.TokenLookup,
+		}
 	}
 
-	return &JWTDriver{}
+	panic("jwt driver config must be a pointer of JWTConfig type")
 }
