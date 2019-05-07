@@ -11,6 +11,13 @@ const (
 	JWTGuard = "jwt"
 )
 
+var (
+	guards  = make(map[string]*guard)
+	drivers = map[string]func(interface{}) interface{}{
+		JWTGuard: newJWTDriver,
+	}
+)
+
 type guard struct {
 	name   string
 	driver interface{}
@@ -54,13 +61,6 @@ func (g guard) user(c *gin.Context) interface{} {
 
 	return user
 }
-
-var (
-	guards  = make(map[string]*guard)
-	drivers = map[string]func(interface{}) interface{}{
-		JWTGuard: newJWTDriver,
-	}
-)
 
 // Register guard.
 func RegisterGuard(name string, driver string, config interface{}) {
