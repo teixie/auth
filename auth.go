@@ -18,8 +18,7 @@ type guard struct {
 
 func (g guard) Guest() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user := g.user(c)
-		if user != nil {
+		if g.user(c) != nil {
 			c.AbortWithStatusJSON(http.StatusOK, gin.H{
 				"code": http.StatusConflict,
 				"msg":  "Authorized",
@@ -33,8 +32,7 @@ func (g guard) Guest() gin.HandlerFunc {
 
 func (g guard) Check() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user := g.user(c)
-		if user == nil {
+		if g.user(c) == nil {
 			c.AbortWithStatusJSON(http.StatusOK, gin.H{
 				"code": http.StatusUnauthorized,
 				"msg":  "Unauthorized",
@@ -52,9 +50,7 @@ func (g guard) user(c *gin.Context) interface{} {
 	}
 
 	user := g.driver.(contracts.Driver).Authenticate(c)
-	if user != nil {
-		c.Set(g.name, user)
-	}
+	c.Set(g.name, user)
 
 	return user
 }
