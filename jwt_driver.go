@@ -57,8 +57,8 @@ var (
 	// ErrInvalidUserProvider indicates the the given user provider is invalid
 	ErrInvalidUserProvider = errors.New("user provider invalid")
 
-	// ErrTokenCreateFailed can be thrown if token create failed
-	ErrTokenCreateFailed = errors.New("jwt token create failed")
+	// ErrCreateTokenFailed can be thrown if token create failed
+	ErrCreateTokenFailed = errors.New("create token failed")
 
 	// Default tokenLookup
 	defaultTokenLookup = "header:Authorization"
@@ -335,7 +335,7 @@ func (j *jwtDriver) Login(c *gin.Context, user interface{}) error {
 
 	token, expire, err := j.createToken(user)
 	if err != nil {
-		return ErrTokenCreateFailed
+		return ErrCreateTokenFailed
 	}
 
 	c.Set(j.name, user)
