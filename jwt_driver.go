@@ -137,7 +137,7 @@ func (j *jwtDriver) Init() error {
 	}
 
 	if j.tokenLookup == "" {
-		j.tokenLookup = "header:Authorization"
+		j.tokenLookup = defaultTokenLookup
 	}
 
 	if j.signingAlgorithm == "" {
@@ -146,7 +146,7 @@ func (j *jwtDriver) Init() error {
 
 	j.tokenHeadName = strings.TrimSpace(j.tokenHeadName)
 	if len(j.tokenHeadName) == 0 {
-		j.tokenHeadName = "Bearer"
+		j.tokenHeadName = defaultTokenHeadName
 	}
 
 	if j.usingPublicKeyAlgo() {
