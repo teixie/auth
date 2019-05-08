@@ -6,7 +6,10 @@ import (
 
 type Guard interface {
 	Guest() gin.HandlerFunc
+
 	Check() gin.HandlerFunc
+
 	Login(*gin.Context, interface{}) error
+
 	Authenticate(*gin.Context) interface{}
 }
