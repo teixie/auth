@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/teixie/auth/contracts"
 )
@@ -14,66 +12,46 @@ const (
 var (
 	guards  = make(map[string]*guard)
 	drivers = map[string]func(string, interface{}) interface{}{
-		JWTGuard: newJWTDriver,
+		JWTGuard: func(name string, config interface{}) interface{} {
+			return NewJWTGuard(name, config)
+		},
 	}
 )
 
 type guard struct {
 	name   string
-	driver interface{}
+	driver contracts.Guard
 }
 
 func (g guard) Guest() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if g.user(c) != nil {
-			c.AbortWithStatusJSON(http.StatusOK, gin.H{
-				"code": http.StatusConflict,
-				"msg":  "Authorized",
-				"data": nil,
-			})
-		}
-
-		c.Next()
-	}
+	return g.driver.Guest()
 }
 
 func (g guard) Check() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if g.user(c) == nil {
-			c.AbortWithStatusJSON(http.StatusOK, gin.H{
-				"code": http.StatusUnauthorized,
-				"msg":  "Unauthorized",
-				"data": nil,
-			})
-		}
-
-		c.Next()
-	}
+	return g.driver.Check()
 }
 
 func (g guard) Login(c *gin.Context, user interface{}) error {
-	return g.driver.(contracts.Driver).Login(c, user)
-}
-
-func (g guard) user(c *gin.Context) interface{} {
-	if user, exists := c.Get(g.name); exists {
-		return user
-	}
-
-	user := g.driver.(contracts.Driver).Authenticate(c)
-	c.Set(g.name, user)
-
-	return user
+	return g.driver.Login(c, user)
 }
 
 // Register guard.
 func RegisterGuard(name string, driver string, config interface{}) {
+	if name == "" {
+		panic("guard name is empty")
+	}
+
 	if handler, ok := drivers[driver]; ok {
-		guards[name] = &guard{
-			name:   name,
-			driver: handler(name, config),
+		obj := handler(name, config)
+		if dri, ok := obj.(contracts.Guard); ok {
+			guards[name] = &guard{
+				name:   name,
+				driver: dri,
+			}
+			return
 		}
-		return
+
+		panic("guard is invalid")
 	}
 
 	panic("driver not found")
@@ -81,8 +59,8 @@ func RegisterGuard(name string, driver string, config interface{}) {
 
 // Get guard by name.
 func Guard(name string) *guard {
-	if _, ok := guards[name]; ok {
-		return guards[name]
+	if g, ok := guards[name]; ok {
+		return g
 	}
 
 	panic("guard not found")

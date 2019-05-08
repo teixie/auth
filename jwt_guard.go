@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"errors"
 	"io/ioutil"
+	"net/http"
 	"strings"
 	"time"
 
@@ -67,7 +68,7 @@ var (
 	defaultTokenHeadName = "Bearer"
 )
 
-type jwtDriver struct {
+type jwtGuard struct {
 	name             string
 	key              []byte
 	signingAlgorithm string
@@ -81,7 +82,7 @@ type jwtDriver struct {
 	userProvider     interface{}
 }
 
-func (j *jwtDriver) readKeys() error {
+func (j *jwtGuard) readKeys() error {
 	err := j.privateKey()
 	if err != nil {
 		return err
@@ -93,7 +94,7 @@ func (j *jwtDriver) readKeys() error {
 	return nil
 }
 
-func (j *jwtDriver) privateKey() error {
+func (j *jwtGuard) privateKey() error {
 	keyData, err := ioutil.ReadFile(j.privKeyFile)
 	if err != nil {
 		return ErrNoPrivKeyFile
@@ -106,7 +107,7 @@ func (j *jwtDriver) privateKey() error {
 	return nil
 }
 
-func (j *jwtDriver) publicKey() error {
+func (j *jwtGuard) publicKey() error {
 	keyData, err := ioutil.ReadFile(j.pubKeyFile)
 	if err != nil {
 		return ErrNoPubKeyFile
@@ -119,7 +120,7 @@ func (j *jwtDriver) publicKey() error {
 	return nil
 }
 
-func (j *jwtDriver) usingPublicKeyAlgo() bool {
+func (j *jwtGuard) usingPublicKeyAlgo() bool {
 	switch j.signingAlgorithm {
 	case "RS256", "RS512", "RS384":
 		return true
@@ -127,7 +128,7 @@ func (j *jwtDriver) usingPublicKeyAlgo() bool {
 	return false
 }
 
-func (j *jwtDriver) Init() error {
+func (j *jwtGuard) Init() error {
 	if j.userProvider == nil {
 		return ErrEmptyUserProvider
 	}
@@ -160,7 +161,7 @@ func (j *jwtDriver) Init() error {
 	return nil
 }
 
-func (j *jwtDriver) getTokenFromHeader(c *gin.Context, key string) (string, error) {
+func (j *jwtGuard) getTokenFromHeader(c *gin.Context, key string) (string, error) {
 	authHeader := c.Request.Header.Get(key)
 
 	if authHeader == "" {
@@ -175,7 +176,7 @@ func (j *jwtDriver) getTokenFromHeader(c *gin.Context, key string) (string, erro
 	return parts[1], nil
 }
 
-func (j *jwtDriver) getTokenFromQuery(c *gin.Context, key string) (string, error) {
+func (j *jwtGuard) getTokenFromQuery(c *gin.Context, key string) (string, error) {
 	token := c.Query(key)
 
 	if token == "" {
@@ -185,7 +186,7 @@ func (j *jwtDriver) getTokenFromQuery(c *gin.Context, key string) (string, error
 	return token, nil
 }
 
-func (j *jwtDriver) getTokenFromCookie(c *gin.Context, key string) (string, error) {
+func (j *jwtGuard) getTokenFromCookie(c *gin.Context, key string) (string, error) {
 	cookie, _ := c.Cookie(key)
 
 	if cookie == "" {
@@ -195,7 +196,7 @@ func (j *jwtDriver) getTokenFromCookie(c *gin.Context, key string) (string, erro
 	return cookie, nil
 }
 
-func (j *jwtDriver) getTokenFromParam(c *gin.Context, key string) (string, error) {
+func (j *jwtGuard) getTokenFromParam(c *gin.Context, key string) (string, error) {
 	token := c.Param(key)
 
 	if token == "" {
@@ -205,7 +206,7 @@ func (j *jwtDriver) getTokenFromParam(c *gin.Context, key string) (string, error
 	return token, nil
 }
 
-func (j *jwtDriver) getToken(c *gin.Context) (string, error) {
+func (j *jwtGuard) getToken(c *gin.Context) (string, error) {
 	var token string
 	var err error
 
@@ -235,7 +236,7 @@ func (j *jwtDriver) getToken(c *gin.Context) (string, error) {
 }
 
 // Parse jwt token from gin context
-func (j *jwtDriver) parseToken(c *gin.Context) (*jwt.Token, error) {
+func (j *jwtGuard) parseToken(c *gin.Context) (*jwt.Token, error) {
 	token, err := j.getToken(c)
 	if err != nil {
 		return nil, err
@@ -255,7 +256,7 @@ func (j *jwtDriver) parseToken(c *gin.Context) (*jwt.Token, error) {
 }
 
 // GetClaimsFromJWT get claims from JWT token
-func (j *jwtDriver) getClaimsFromJWT(c *gin.Context) (MapClaims, error) {
+func (j *jwtGuard) getClaimsFromJWT(c *gin.Context) (MapClaims, error) {
 	token, err := j.parseToken(c)
 	if err != nil {
 		return nil, err
@@ -269,7 +270,46 @@ func (j *jwtDriver) getClaimsFromJWT(c *gin.Context) (MapClaims, error) {
 	return claims, nil
 }
 
-func (j *jwtDriver) Authenticate(c *gin.Context) interface{} {
+func (j *jwtGuard) signedString(token *jwt.Token) (string, error) {
+	var tokenString string
+	var err error
+	if j.usingPublicKeyAlgo() {
+		tokenString, err = token.SignedString(j.privKey)
+	} else {
+		tokenString, err = token.SignedString(j.key)
+	}
+	return tokenString, err
+}
+
+// createToken method that clients can use to get a jwt token.
+func (j *jwtGuard) createToken(user interface{}) (string, time.Time, error) {
+	token := jwt.New(jwt.GetSigningMethod(j.signingAlgorithm))
+	claims := token.Claims.(jwt.MapClaims)
+
+	expire := hawking.Now().Add(j.timeout)
+	claims["id"] = user.(contracts.Provider).GetId()
+	claims["exp"] = expire.Unix()
+	claims["orig_iat"] = hawking.Now().Unix()
+	tokenString, err := j.signedString(token)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return tokenString, expire.Time(), nil
+}
+
+func (j *jwtGuard) user(c *gin.Context) interface{} {
+	if user, exists := c.Get(j.name); exists {
+		return user
+	}
+
+	user := j.Authenticate(c)
+	c.Set(j.name, user)
+
+	return user
+}
+
+func (j *jwtGuard) Authenticate(c *gin.Context) interface{} {
 	claims, err := j.getClaimsFromJWT(c)
 	if err != nil {
 		return nil
@@ -300,35 +340,7 @@ func (j *jwtDriver) Authenticate(c *gin.Context) interface{} {
 	return j.userProvider.(contracts.Provider).RetrieveById(claims["id"].(int64))
 }
 
-func (j *jwtDriver) signedString(token *jwt.Token) (string, error) {
-	var tokenString string
-	var err error
-	if j.usingPublicKeyAlgo() {
-		tokenString, err = token.SignedString(j.privKey)
-	} else {
-		tokenString, err = token.SignedString(j.key)
-	}
-	return tokenString, err
-}
-
-// createToken method that clients can use to get a jwt token.
-func (j *jwtDriver) createToken(user interface{}) (string, time.Time, error) {
-	token := jwt.New(jwt.GetSigningMethod(j.signingAlgorithm))
-	claims := token.Claims.(jwt.MapClaims)
-
-	expire := hawking.Now().Add(j.timeout)
-	claims["id"] = user.(contracts.Provider).GetId()
-	claims["exp"] = expire.Unix()
-	claims["orig_iat"] = hawking.Now().Unix()
-	tokenString, err := j.signedString(token)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-
-	return tokenString, expire.Time(), nil
-}
-
-func (j *jwtDriver) Login(c *gin.Context, user interface{}) error {
+func (j *jwtGuard) Login(c *gin.Context, user interface{}) error {
 	if _, ok := user.(contracts.Provider); !ok {
 		return ErrInvalidUserProvider
 	}
@@ -345,9 +357,38 @@ func (j *jwtDriver) Login(c *gin.Context, user interface{}) error {
 	return nil
 }
 
-func newJWTDriver(name string, config interface{}) interface{} {
+func (j *jwtGuard) Guest() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set(j.name, "abc")
+		if j.user(c) != nil {
+			c.AbortWithStatusJSON(http.StatusOK, gin.H{
+				"code": http.StatusConflict,
+				"msg":  "Authorized",
+				"data": nil,
+			})
+		}
+
+		c.Next()
+	}
+}
+
+func (j *jwtGuard) Check() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if j.user(c) == nil {
+			c.AbortWithStatusJSON(http.StatusOK, gin.H{
+				"code": http.StatusUnauthorized,
+				"msg":  "Unauthorized",
+				"data": nil,
+			})
+		}
+
+		c.Next()
+	}
+}
+
+func NewJWTGuard(name string, config interface{}) *jwtGuard {
 	if cfg, ok := config.(*JWTConfig); ok {
-		driver := &jwtDriver{
+		g := &jwtGuard{
 			name:             name,
 			key:              cfg.Key,
 			signingAlgorithm: cfg.SigningAlgorithm,
@@ -358,12 +399,12 @@ func newJWTDriver(name string, config interface{}) interface{} {
 			pubKeyFile:       cfg.PubKeyFile,
 			userProvider:     cfg.UserProvider,
 		}
-		if err := driver.Init(); err != nil {
+		if err := g.Init(); err != nil {
 			panic(err.Error())
 		}
 
-		return driver
+		return g
 	}
 
-	panic("jwt driver config must be a pointer of JWTConfig type")
+	panic("jwt guard config must be a pointer of JWTConfig type")
 }
