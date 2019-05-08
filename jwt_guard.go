@@ -270,12 +270,12 @@ func (j *jwtGuard) signedString(token *jwt.Token) (string, error) {
 }
 
 // createToken method that clients can use to get a jwt token.
-func (j *jwtGuard) createToken(user interface{}) (string, time.Time, error) {
+func (j *jwtGuard) createToken(user contracts.User) (string, time.Time, error) {
 	token := jwt.New(jwt.GetSigningMethod(j.signingAlgorithm))
 	claims := token.Claims.(jwt.MapClaims)
 
 	expire := hawking.Now().Add(j.timeout)
-	claims["id"] = user.(contracts.User).GetIdString()
+	claims["id"] = user.GetIdString()
 	claims["exp"] = expire.Unix()
 	claims["orig_iat"] = hawking.Now().Unix()
 	tokenString, err := j.signedString(token)
