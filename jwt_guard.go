@@ -359,7 +359,6 @@ func (j *jwtGuard) Login(c *gin.Context, user interface{}) error {
 
 func (j *jwtGuard) Guest() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Set(j.name, "abc")
 		if j.user(c) != nil {
 			c.AbortWithStatusJSON(http.StatusOK, gin.H{
 				"code": http.StatusConflict,
