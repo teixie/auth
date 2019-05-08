@@ -72,17 +72,19 @@ var (
 )
 
 type jwtGuard struct {
-	name             string
-	key              []byte
-	signingAlgorithm string
-	timeout          time.Duration
-	tokenLookup      string
-	tokenHeadName    string
-	privKeyFile      string
-	pubKeyFile       string
-	privKey          *rsa.PrivateKey
-	pubKey           *rsa.PublicKey
-	userResolver     func(string) contracts.User
+	name                      string
+	key                       []byte
+	signingAlgorithm          string
+	timeout                   time.Duration
+	tokenLookup               string
+	tokenHeadName             string
+	privKeyFile               string
+	pubKeyFile                string
+	privKey                   *rsa.PrivateKey
+	pubKey                    *rsa.PublicKey
+	userResolver              func(string) contracts.User
+	redirectIfAuthenticated   func(*gin.Context)
+	redirectIfUnauthenticated func(*gin.Context)
 }
 
 func (j *jwtGuard) readKeys() error {
@@ -354,11 +356,15 @@ func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
 func (j *jwtGuard) Guest() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if j.user(c) != nil {
-			c.AbortWithStatusJSON(http.StatusOK, gin.H{
-				"code": http.StatusConflict,
-				"msg":  "Authorized",
-				"data": nil,
-			})
+			if j.redirectIfAuthenticated == nil {
+				c.AbortWithStatusJSON(http.StatusOK, gin.H{
+					"code": http.StatusConflict,
+					"msg":  "Authorized",
+					"data": nil,
+				})
+			} else {
+				j.redirectIfAuthenticated(c)
+			}
 		}
 
 		c.Next()
@@ -368,11 +374,15 @@ func (j *jwtGuard) Guest() gin.HandlerFunc {
 func (j *jwtGuard) Check() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if j.user(c) == nil {
-			c.AbortWithStatusJSON(http.StatusOK, gin.H{
-				"code": http.StatusUnauthorized,
-				"msg":  "Unauthorized",
-				"data": nil,
-			})
+			if j.redirectIfUnauthenticated == nil {
+				c.AbortWithStatusJSON(http.StatusOK, gin.H{
+					"code": http.StatusUnauthorized,
+					"msg":  "Unauthorized",
+					"data": nil,
+				})
+			} else {
+				j.redirectIfUnauthenticated(c)
+			}
 		}
 
 		c.Next()
@@ -386,15 +396,17 @@ func NewJWTGuard(name string, config interface{}) *jwtGuard {
 		}
 
 		g := &jwtGuard{
-			name:             name,
-			key:              cfg.Key,
-			signingAlgorithm: cfg.SigningAlgorithm,
-			timeout:          cfg.Timeout,
-			tokenLookup:      cfg.TokenLookup,
-			tokenHeadName:    cfg.TokenHeadName,
-			privKeyFile:      cfg.PrivKeyFile,
-			pubKeyFile:       cfg.PubKeyFile,
-			userResolver:     cfg.UserResolver,
+			name:                      name,
+			key:                       cfg.Key,
+			signingAlgorithm:          cfg.SigningAlgorithm,
+			timeout:                   cfg.Timeout,
+			tokenLookup:               cfg.TokenLookup,
+			tokenHeadName:             cfg.TokenHeadName,
+			privKeyFile:               cfg.PrivKeyFile,
+			pubKeyFile:                cfg.PubKeyFile,
+			userResolver:              cfg.UserResolver,
+			redirectIfAuthenticated:   cfg.RedirectIfAuthenticated,
+			redirectIfUnauthenticated: cfg.RedirectIfUnauthenticated,
 		}
 		if err := g.Init(); err != nil {
 			panic(err.Error())

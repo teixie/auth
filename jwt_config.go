@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/gin-gonic/gin"
 	"time"
 
 	"github.com/teixie/auth/contracts"
@@ -37,6 +38,12 @@ type JWTConfig struct {
 
 	// User resolver
 	UserResolver func(string) contracts.User
+
+	// Redirect if authenticated
+	RedirectIfAuthenticated func(*gin.Context)
+
+	// Redirect if unauthenticated
+	RedirectIfUnauthenticated func(*gin.Context)
 }
 
 func (j *JWTConfig) Validate() error {
