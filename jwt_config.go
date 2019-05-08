@@ -44,6 +44,21 @@ type JWTConfig struct {
 
 	// Redirect if unauthenticated
 	RedirectIfUnauthenticated func(*gin.Context)
+
+	// Cookie name
+	CookieName string
+
+	// Cookie path
+	CookiePath string
+
+	// Secure cookie
+	SecureCookie bool
+
+	// Cookie HTTP Only
+	CookieHTTPOnly bool
+
+	// Cookie domain
+	CookieDomain string
 }
 
 func (j *JWTConfig) Validate() error {

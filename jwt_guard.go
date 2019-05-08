@@ -69,6 +69,9 @@ var (
 
 	// Default signingAlgorithm
 	defaultSigningAlgorithm = "HS256"
+
+	// Default cookie path
+	defaultCookiePath = "/"
 )
 
 type jwtGuard struct {
@@ -85,6 +88,11 @@ type jwtGuard struct {
 	userResolver              func(string) contracts.User
 	redirectIfAuthenticated   func(*gin.Context)
 	redirectIfUnauthenticated func(*gin.Context)
+	cookieName                string
+	cookiePath                string
+	secureCookie              bool
+	cookieHTTPOnly            bool
+	cookieDomain              string
 }
 
 func (j *jwtGuard) readKeys() error {
@@ -140,6 +148,10 @@ func (j *jwtGuard) Init() error {
 
 	if j.signingAlgorithm == "" {
 		j.signingAlgorithm = defaultSigningAlgorithm
+	}
+
+	if j.cookiePath == "" {
+		j.cookiePath = defaultCookiePath
 	}
 
 	j.tokenHeadName = strings.TrimSpace(j.tokenHeadName)
@@ -350,6 +362,19 @@ func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
 	c.Set(j.name+":TOKEN", token)
 	c.Set(j.name+":TOKEN_EXPIRE", expire)
 
+	if j.cookieName != "" {
+		maxage := int(expire.Unix() - hawking.Now().Unix())
+		c.SetCookie(
+			j.cookieName,
+			token,
+			maxage,
+			j.cookiePath,
+			j.cookieDomain,
+			j.secureCookie,
+			j.cookieHTTPOnly,
+		)
+	}
+
 	return nil
 }
 
@@ -407,6 +432,11 @@ func NewJWTGuard(name string, config interface{}) *jwtGuard {
 			userResolver:              cfg.UserResolver,
 			redirectIfAuthenticated:   cfg.RedirectIfAuthenticated,
 			redirectIfUnauthenticated: cfg.RedirectIfUnauthenticated,
+			cookieName:                cfg.CookieName,
+			cookiePath:                cfg.CookiePath,
+			secureCookie:              cfg.SecureCookie,
+			cookieHTTPOnly:            cfg.CookieHTTPOnly,
+			cookieDomain:              cfg.CookieDomain,
 		}
 		if err := g.Init(); err != nil {
 			panic(err.Error())
