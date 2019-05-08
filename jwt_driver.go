@@ -329,6 +329,10 @@ func (j *jwtDriver) createToken(user interface{}) (string, time.Time, error) {
 }
 
 func (j *jwtDriver) Login(c *gin.Context, user interface{}) error {
+	if _, ok := user.(contracts.Provider); !ok {
+		return ErrInvalidUserProvider
+	}
+
 	token, expire, err := j.createToken(user)
 	if err != nil {
 		return ErrTokenCreateFailed
