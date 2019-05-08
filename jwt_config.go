@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/teixie/auth/contracts"
 	"time"
 )
 
@@ -35,4 +36,20 @@ type JWTConfig struct {
 
 	// User provider
 	UserProvider interface{}
+}
+
+func (j *JWTConfig) Validate() error {
+	if j.Key == nil {
+		return ErrMissingSecretKey
+	}
+
+	if j.UserProvider == nil {
+		return ErrEmptyUserProvider
+	}
+
+	if _, ok := j.UserProvider.(contracts.Provider); !ok {
+		return ErrInvalidUserProvider
+	}
+
+	return nil
 }

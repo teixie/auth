@@ -58,8 +58,8 @@ var (
 	// ErrInvalidUserProvider indicates the the given user provider is invalid
 	ErrInvalidUserProvider = errors.New("user provider invalid")
 
-	// ErrCreateTokenFailed can be thrown if token create failed
-	ErrCreateTokenFailed = errors.New("create token failed")
+	// ErrFailedCreateToken can be thrown if token create failed
+	ErrFailedCreateToken = errors.New("create token failed")
 
 	// Default tokenLookup
 	defaultTokenLookup = "header:Authorization"
@@ -79,7 +79,7 @@ type jwtGuard struct {
 	pubKeyFile       string
 	privKey          *rsa.PrivateKey
 	pubKey           *rsa.PublicKey
-	userProvider     interface{}
+	userProvider     contracts.Provider
 }
 
 func (j *jwtGuard) readKeys() error {
@@ -129,14 +129,6 @@ func (j *jwtGuard) usingPublicKeyAlgo() bool {
 }
 
 func (j *jwtGuard) Init() error {
-	if j.userProvider == nil {
-		return ErrEmptyUserProvider
-	}
-
-	if _, ok := j.userProvider.(contracts.Provider); !ok {
-		return ErrInvalidUserProvider
-	}
-
 	if j.tokenLookup == "" {
 		j.tokenLookup = defaultTokenLookup
 	}
@@ -152,10 +144,6 @@ func (j *jwtGuard) Init() error {
 
 	if j.usingPublicKeyAlgo() {
 		return j.readKeys()
-	}
-
-	if j.key == nil {
-		return ErrMissingSecretKey
 	}
 
 	return nil
@@ -337,7 +325,7 @@ func (j *jwtGuard) Authenticate(c *gin.Context) interface{} {
 
 	c.Set(j.name+":PAYLOAD", claims)
 
-	return j.userProvider.(contracts.Provider).RetrieveById(claims["id"].(int64))
+	return j.userProvider.RetrieveById(claims["id"].(int64))
 }
 
 func (j *jwtGuard) Login(c *gin.Context, user interface{}) error {
@@ -347,7 +335,7 @@ func (j *jwtGuard) Login(c *gin.Context, user interface{}) error {
 
 	token, expire, err := j.createToken(user)
 	if err != nil {
-		return ErrCreateTokenFailed
+		return ErrFailedCreateToken
 	}
 
 	c.Set(j.name, user)
@@ -387,6 +375,10 @@ func (j *jwtGuard) Check() gin.HandlerFunc {
 
 func NewJWTGuard(name string, config interface{}) *jwtGuard {
 	if cfg, ok := config.(*JWTConfig); ok {
+		if err := cfg.Validate(); err != nil {
+			panic(err.Error())
+		}
+
 		g := &jwtGuard{
 			name:             name,
 			key:              cfg.Key,
@@ -396,7 +388,7 @@ func NewJWTGuard(name string, config interface{}) *jwtGuard {
 			tokenHeadName:    cfg.TokenHeadName,
 			privKeyFile:      cfg.PrivKeyFile,
 			pubKeyFile:       cfg.PubKeyFile,
-			userProvider:     cfg.UserProvider,
+			userProvider:     cfg.UserProvider.(contracts.Provider),
 		}
 		if err := g.Init(); err != nil {
 			panic(err.Error())
