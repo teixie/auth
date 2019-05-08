@@ -2,6 +2,8 @@ package auth
 
 import (
 	"time"
+
+	"github.com/teixie/auth/contracts"
 )
 
 type JWTConfig struct {
@@ -34,7 +36,7 @@ type JWTConfig struct {
 	PubKeyFile string
 
 	// User resolver
-	UserResolver func(string) interface{}
+	UserResolver func(string) contracts.User
 }
 
 func (j *JWTConfig) Validate() error {

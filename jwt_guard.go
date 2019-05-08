@@ -55,9 +55,6 @@ var (
 	// ErrEmptyUserResolver can be thrown if user resolver is empty
 	ErrEmptyUserResolver = errors.New("user resolver is empty")
 
-	// ErrInvalidUserObject indicates the the given user object is invalid
-	ErrInvalidUserObject = errors.New("user object invalid")
-
 	// ErrFailedCreateToken can be thrown if token create failed
 	ErrFailedCreateToken = errors.New("create token failed")
 
@@ -82,7 +79,7 @@ type jwtGuard struct {
 	pubKeyFile       string
 	privKey          *rsa.PrivateKey
 	pubKey           *rsa.PublicKey
-	userResolver     func(string) interface{}
+	userResolver     func(string) contracts.User
 }
 
 func (j *jwtGuard) readKeys() error {
@@ -289,9 +286,9 @@ func (j *jwtGuard) createToken(user interface{}) (string, time.Time, error) {
 	return tokenString, expire.Time(), nil
 }
 
-func (j *jwtGuard) user(c *gin.Context) interface{} {
+func (j *jwtGuard) user(c *gin.Context) contracts.User {
 	if user, exists := c.Get(j.name); exists {
-		return user
+		return user.(contracts.User)
 	}
 
 	user := j.Authenticate(c)
@@ -300,7 +297,7 @@ func (j *jwtGuard) user(c *gin.Context) interface{} {
 	return user
 }
 
-func (j *jwtGuard) Authenticate(c *gin.Context) interface{} {
+func (j *jwtGuard) Authenticate(c *gin.Context) contracts.User {
 	claims, err := j.getClaimsFromJWT(c)
 	if err != nil {
 		return nil
@@ -331,11 +328,7 @@ func (j *jwtGuard) Authenticate(c *gin.Context) interface{} {
 	return j.userResolver(claims["id"].(string))
 }
 
-func (j *jwtGuard) Login(c *gin.Context, user interface{}) error {
-	if _, ok := user.(contracts.User); !ok {
-		return ErrInvalidUserObject
-	}
-
+func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
 	token, expire, err := j.createToken(user)
 	if err != nil {
 		return ErrFailedCreateToken

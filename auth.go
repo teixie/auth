@@ -31,7 +31,7 @@ func (g guard) Check() gin.HandlerFunc {
 	return g.driver.Check()
 }
 
-func (g guard) Login(c *gin.Context, user interface{}) error {
+func (g guard) Login(c *gin.Context, user contracts.User) error {
 	return g.driver.Login(c, user)
 }
 

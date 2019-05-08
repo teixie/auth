@@ -9,7 +9,7 @@ type Guard interface {
 
 	Check() gin.HandlerFunc
 
-	Login(*gin.Context, interface{}) error
+	Login(*gin.Context, User) error
 
-	Authenticate(*gin.Context) interface{}
+	Authenticate(*gin.Context) User
 }
