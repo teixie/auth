@@ -66,6 +66,9 @@ var (
 
 	// Default tokenHeadName
 	defaultTokenHeadName = "Bearer"
+
+	// Default signingAlgorithm
+	defaultSigningAlgorithm = "HS256"
 )
 
 type jwtGuard struct {
@@ -134,7 +137,7 @@ func (j *jwtGuard) Init() error {
 	}
 
 	if j.signingAlgorithm == "" {
-		j.signingAlgorithm = "HS256"
+		j.signingAlgorithm = defaultSigningAlgorithm
 	}
 
 	j.tokenHeadName = strings.TrimSpace(j.tokenHeadName)
