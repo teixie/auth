@@ -291,7 +291,10 @@ func (j *jwtGuard) createToken(user contracts.User) (string, time.Time, error) {
 
 func (j *jwtGuard) user(c *gin.Context) contracts.User {
 	if user, exists := c.Get(j.name); exists {
-		return user.(contracts.User)
+		if usr, ok := user.(contracts.User); ok {
+			return usr
+		}
+		return nil
 	}
 
 	user := j.Authenticate(c)
