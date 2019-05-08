@@ -52,11 +52,11 @@ var (
 	// ErrInvalidPubKey indicates the the given public key is invalid
 	ErrInvalidPubKey = errors.New("public key invalid")
 
-	// ErrEmptyUserProvider can be thrown if user provider is empty
-	ErrEmptyUserProvider = errors.New("user provider is empty")
+	// ErrEmptyUserResolver can be thrown if user resolver is empty
+	ErrEmptyUserResolver = errors.New("user resolver is empty")
 
-	// ErrInvalidUserProvider indicates the the given user provider is invalid
-	ErrInvalidUserProvider = errors.New("user provider invalid")
+	// ErrInvalidUserObject indicates the the given user object is invalid
+	ErrInvalidUserObject = errors.New("user object invalid")
 
 	// ErrFailedCreateToken can be thrown if token create failed
 	ErrFailedCreateToken = errors.New("create token failed")
@@ -82,7 +82,7 @@ type jwtGuard struct {
 	pubKeyFile       string
 	privKey          *rsa.PrivateKey
 	pubKey           *rsa.PublicKey
-	userProvider     contracts.Provider
+	userResolver     func(string) interface{}
 }
 
 func (j *jwtGuard) readKeys() error {
@@ -278,7 +278,7 @@ func (j *jwtGuard) createToken(user interface{}) (string, time.Time, error) {
 	claims := token.Claims.(jwt.MapClaims)
 
 	expire := hawking.Now().Add(j.timeout)
-	claims["id"] = user.(contracts.Provider).GetId()
+	claims["id"] = user.(contracts.User).GetIdString()
 	claims["exp"] = expire.Unix()
 	claims["orig_iat"] = hawking.Now().Unix()
 	tokenString, err := j.signedString(token)
@@ -310,7 +310,7 @@ func (j *jwtGuard) Authenticate(c *gin.Context) interface{} {
 		return nil
 	}
 
-	if _, ok := claims["id"].(int64); !ok {
+	if _, ok := claims["id"].(string); !ok {
 		return nil
 	}
 
@@ -328,12 +328,12 @@ func (j *jwtGuard) Authenticate(c *gin.Context) interface{} {
 
 	c.Set(j.name+":PAYLOAD", claims)
 
-	return j.userProvider.RetrieveById(claims["id"].(int64))
+	return j.userResolver(claims["id"].(string))
 }
 
 func (j *jwtGuard) Login(c *gin.Context, user interface{}) error {
-	if _, ok := user.(contracts.Provider); !ok {
-		return ErrInvalidUserProvider
+	if _, ok := user.(contracts.User); !ok {
+		return ErrInvalidUserObject
 	}
 
 	token, expire, err := j.createToken(user)
@@ -391,7 +391,7 @@ func NewJWTGuard(name string, config interface{}) *jwtGuard {
 			tokenHeadName:    cfg.TokenHeadName,
 			privKeyFile:      cfg.PrivKeyFile,
 			pubKeyFile:       cfg.PubKeyFile,
-			userProvider:     cfg.UserProvider.(contracts.Provider),
+			userResolver:     cfg.UserResolver,
 		}
 		if err := g.Init(); err != nil {
 			panic(err.Error())

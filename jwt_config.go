@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"github.com/teixie/auth/contracts"
 	"time"
 )
 
@@ -34,8 +33,8 @@ type JWTConfig struct {
 	// Public key file for asymmetric algorithms
 	PubKeyFile string
 
-	// User provider
-	UserProvider interface{}
+	// User resolver
+	UserResolver func(string) interface{}
 }
 
 func (j *JWTConfig) Validate() error {
@@ -43,12 +42,8 @@ func (j *JWTConfig) Validate() error {
 		return ErrMissingSecretKey
 	}
 
-	if j.UserProvider == nil {
-		return ErrEmptyUserProvider
-	}
-
-	if _, ok := j.UserProvider.(contracts.Provider); !ok {
-		return ErrInvalidUserProvider
+	if j.UserResolver == nil {
+		return ErrEmptyUserResolver
 	}
 
 	return nil
