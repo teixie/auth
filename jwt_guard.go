@@ -55,6 +55,9 @@ var (
 	// ErrEmptyUserResolver can be thrown if user resolver is empty
 	ErrEmptyUserResolver = errors.New("user resolver is empty")
 
+	// ErrEmptyUser can be thrown if user is empty
+	ErrEmptyUser = errors.New("user is empty")
+
 	// ErrFailedCreateToken can be thrown if token create failed
 	ErrFailedCreateToken = errors.New("create token failed")
 
@@ -329,6 +332,10 @@ func (j *jwtGuard) Authenticate(c *gin.Context) contracts.User {
 }
 
 func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
+	if user == nil {
+		return ErrEmptyUser
+	}
+
 	token, expire, err := j.createToken(user)
 	if err != nil {
 		return ErrFailedCreateToken
