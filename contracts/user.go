@@ -1,5 +1,5 @@
 package contracts
 
 type User interface {
-	GetIdString() string
+	IdString() string
 }

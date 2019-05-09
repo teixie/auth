@@ -292,7 +292,7 @@ func (j *jwtGuard) createToken(user contracts.User) (string, time.Time, error) {
 	claims := token.Claims.(jwt.MapClaims)
 
 	expire := hawking.Now().Add(j.timeout)
-	claims["id"] = user.GetIdString()
+	claims["id"] = user.IdString()
 	claims["exp"] = expire.Unix()
 	claims["orig_iat"] = hawking.Now().Unix()
 	tokenString, err := j.signedString(token)
