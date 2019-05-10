@@ -72,10 +72,12 @@ var (
 
 	// Default cookie path
 	defaultCookiePath = "/"
+
+	// Default user key
+	defaultUserKey = "user"
 )
 
 type jwtGuard struct {
-	name                      string
 	key                       []byte
 	signingAlgorithm          string
 	timeout                   time.Duration
@@ -85,6 +87,7 @@ type jwtGuard struct {
 	pubKeyFile                string
 	privKey                   *rsa.PrivateKey
 	pubKey                    *rsa.PublicKey
+	userKey                   string
 	userResolver              func(string) contracts.User
 	redirectIfAuthenticated   func(*gin.Context)
 	redirectIfUnauthenticated func(*gin.Context)
@@ -143,6 +146,10 @@ func (j *jwtGuard) usingPublicKeyAlgo() bool {
 }
 
 func (j *jwtGuard) Init() error {
+	if j.userKey == "" {
+		j.userKey = defaultUserKey
+	}
+
 	if j.tokenLookup == "" {
 		j.tokenLookup = defaultTokenLookup
 	}
@@ -236,7 +243,7 @@ func (j *jwtGuard) getToken(c *gin.Context) (string, error) {
 		}
 	}
 
-	c.Set(j.name+":TOKEN", token)
+	c.Set(j.userKey+":TOKEN", token)
 
 	return token, err
 }
@@ -305,7 +312,7 @@ func (j *jwtGuard) createToken(user contracts.User) (string, time.Time, error) {
 }
 
 func (j *jwtGuard) user(c *gin.Context) contracts.User {
-	if user, exists := c.Get(j.name); exists {
+	if user, exists := c.Get(j.userKey); exists {
 		if usr, ok := user.(contracts.User); ok {
 			return usr
 		}
@@ -313,7 +320,7 @@ func (j *jwtGuard) user(c *gin.Context) contracts.User {
 	}
 
 	user := j.Authenticate(c)
-	c.Set(j.name, user)
+	c.Set(j.userKey, user)
 
 	return user
 }
@@ -344,7 +351,7 @@ func (j *jwtGuard) Authenticate(c *gin.Context) contracts.User {
 		return nil
 	}
 
-	c.Set(j.name+":PAYLOAD", claims)
+	c.Set(j.userKey+":PAYLOAD", claims)
 
 	return j.userResolver(claims["id"].(string))
 }
@@ -359,16 +366,16 @@ func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
 		return ErrFailedCreateToken
 	}
 
-	c.Set(j.name, user)
-	c.Set(j.name+":TOKEN", token)
-	c.Set(j.name+":TOKEN_EXPIRE", expire)
+	c.Set(j.userKey, user)
+	c.Set(j.userKey+":TOKEN", token)
+	c.Set(j.userKey+":TOKEN_EXPIRE", expire)
 
 	if j.cookieName != "" {
-		maxage := int(expire.Unix() - hawking.Now().Unix())
+		maxAge := int(expire.Unix() - hawking.Now().Unix())
 		c.SetCookie(
 			j.cookieName,
 			token,
-			maxage,
+			maxAge,
 			j.cookiePath,
 			j.cookieDomain,
 			j.secureCookie,
@@ -419,14 +426,13 @@ func (j *jwtGuard) Check() gin.HandlerFunc {
 	}
 }
 
-func NewJWTGuard(name string, config interface{}) *jwtGuard {
+func NewJWTGuard(config interface{}) *jwtGuard {
 	if cfg, ok := config.(*JWTConfig); ok {
 		if err := cfg.Validate(); err != nil {
 			panic(err.Error())
 		}
 
 		g := &jwtGuard{
-			name:                      name,
 			key:                       cfg.Key,
 			signingAlgorithm:          cfg.SigningAlgorithm,
 			timeout:                   cfg.Timeout,
@@ -434,6 +440,7 @@ func NewJWTGuard(name string, config interface{}) *jwtGuard {
 			tokenHeadName:             cfg.TokenHeadName,
 			privKeyFile:               cfg.PrivKeyFile,
 			pubKeyFile:                cfg.PubKeyFile,
+			userKey:                   cfg.UserKey,
 			userResolver:              cfg.UserResolver,
 			redirectIfAuthenticated:   cfg.RedirectIfAuthenticated,
 			redirectIfUnauthenticated: cfg.RedirectIfUnauthenticated,

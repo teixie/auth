@@ -11,9 +11,9 @@ const (
 
 var (
 	guards  = make(map[string]*guard)
-	drivers = map[string]func(string, interface{}) interface{}{
-		JWTGuard: func(name string, config interface{}) interface{} {
-			return NewJWTGuard(name, config)
+	drivers = map[string]func(interface{}) interface{}{
+		JWTGuard: func(config interface{}) interface{} {
+			return NewJWTGuard(config)
 		},
 	}
 )
@@ -42,7 +42,7 @@ func RegisterGuard(name string, driver string, config interface{}) {
 	}
 
 	if handler, ok := drivers[driver]; ok {
-		obj := handler(name, config)
+		obj := handler(config)
 		if dri, ok := obj.(contracts.Guard); ok {
 			guards[name] = &guard{
 				name:   name,

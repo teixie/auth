@@ -36,6 +36,9 @@ type JWTConfig struct {
 	// Public key file for asymmetric algorithms
 	PubKeyFile string
 
+	// User key
+	UserKey string
+
 	// User resolver
 	UserResolver func(string) contracts.User
 
