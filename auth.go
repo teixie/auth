@@ -5,17 +5,9 @@ import (
 	"github.com/teixie/auth/contracts"
 )
 
-const (
-	JWTGuard = "jwt"
-)
-
 var (
 	guards  = make(map[string]*guard)
-	drivers = map[string]func(interface{}) interface{}{
-		JWTGuard: func(config interface{}) interface{} {
-			return NewJWTGuard(config)
-		},
-	}
+	drivers = make(map[string]func(interface{}) contracts.Guard)
 )
 
 type guard struct {
@@ -35,23 +27,23 @@ func (g guard) Login(c *gin.Context, user contracts.User) error {
 	return g.driver.Login(c, user)
 }
 
+// Register driver.
+func RegisterDriver(driverName string, driver func(interface{}) contracts.Guard) {
+	drivers[driverName] = driver
+}
+
 // Register guard.
-func RegisterGuard(name string, driver string, config interface{}) {
+func RegisterGuard(name string, driverName string, config interface{}) {
 	if name == "" {
 		panic("guard name is empty")
 	}
 
-	if handler, ok := drivers[driver]; ok {
-		obj := handler(config)
-		if dri, ok := obj.(contracts.Guard); ok {
-			guards[name] = &guard{
-				name:   name,
-				driver: dri,
-			}
-			return
+	if handler, ok := drivers[driverName]; ok {
+		guards[name] = &guard{
+			name:   name,
+			driver: handler(config),
 		}
-
-		panic("guard is invalid")
+		return
 	}
 
 	panic("driver not found")

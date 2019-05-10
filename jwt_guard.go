@@ -14,9 +14,9 @@ import (
 	"github.com/teixie/hawking"
 )
 
-// MapClaims type that uses the map[string]interface{} for JSON decoding
-// This is the default claims type if you don't supply one
-type MapClaims map[string]interface{}
+const (
+	JWTGuard = "jwt"
+)
 
 var (
 	// ErrMissingSecretKey indicates Secret key is required
@@ -76,6 +76,10 @@ var (
 	// Default user key
 	defaultUserKey = "user"
 )
+
+// MapClaims type that uses the map[string]interface{} for JSON decoding
+// This is the default claims type if you don't supply one
+type MapClaims map[string]interface{}
 
 type jwtGuard struct {
 	key                       []byte
@@ -459,4 +463,10 @@ func NewJWTGuard(config interface{}) *jwtGuard {
 	}
 
 	panic("jwt guard config must be a pointer of JWTConfig type")
+}
+
+func init() {
+	RegisterDriver(JWTGuard, func(config interface{}) contracts.Guard {
+		return NewJWTGuard(config)
+	})
 }
