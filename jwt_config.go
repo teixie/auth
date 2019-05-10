@@ -1,9 +1,9 @@
 package auth
 
 import (
-	"github.com/gin-gonic/gin"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/teixie/auth/contracts"
 )
 
@@ -44,6 +44,9 @@ type JWTConfig struct {
 
 	// Redirect if unauthenticated
 	RedirectIfUnauthenticated func(*gin.Context)
+
+	// AuthorizationHeader is a token name in the header. Such as "Authorization".
+	AuthorizationHeader string
 
 	// Cookie name
 	CookieName string

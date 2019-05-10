@@ -88,6 +88,7 @@ type jwtGuard struct {
 	userResolver              func(string) contracts.User
 	redirectIfAuthenticated   func(*gin.Context)
 	redirectIfUnauthenticated func(*gin.Context)
+	authorizationHeader       string
 	cookieName                string
 	cookiePath                string
 	secureCookie              bool
@@ -375,6 +376,10 @@ func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
 		)
 	}
 
+	if j.authorizationHeader != "" {
+		c.Header(j.authorizationHeader, j.tokenHeadName+" "+token)
+	}
+
 	return nil
 }
 
@@ -432,6 +437,7 @@ func NewJWTGuard(name string, config interface{}) *jwtGuard {
 			userResolver:              cfg.UserResolver,
 			redirectIfAuthenticated:   cfg.RedirectIfAuthenticated,
 			redirectIfUnauthenticated: cfg.RedirectIfUnauthenticated,
+			authorizationHeader:       cfg.AuthorizationHeader,
 			cookieName:                cfg.CookieName,
 			cookiePath:                cfg.CookiePath,
 			secureCookie:              cfg.SecureCookie,
