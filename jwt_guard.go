@@ -315,21 +315,7 @@ func (j *jwtGuard) createToken(user contracts.User) (string, time.Time, error) {
 	return tokenString, expire.Time(), nil
 }
 
-func (j *jwtGuard) user(c *gin.Context) contracts.User {
-	if user, exists := c.Get(j.userKey); exists {
-		if usr, ok := user.(contracts.User); ok {
-			return usr
-		}
-		return nil
-	}
-
-	user := j.Authenticate(c)
-	c.Set(j.userKey, user)
-
-	return user
-}
-
-func (j *jwtGuard) Authenticate(c *gin.Context) contracts.User {
+func (j *jwtGuard) authenticate(c *gin.Context) contracts.User {
 	claims, err := j.getClaimsFromJWT(c)
 	if err != nil {
 		return nil
@@ -358,6 +344,20 @@ func (j *jwtGuard) Authenticate(c *gin.Context) contracts.User {
 	c.Set(j.userKey+":PAYLOAD", claims)
 
 	return j.userResolver(claims["id"].(string))
+}
+
+func (j *jwtGuard) User(c *gin.Context) contracts.User {
+	if user, exists := c.Get(j.userKey); exists {
+		if usr, ok := user.(contracts.User); ok {
+			return usr
+		}
+		return nil
+	}
+
+	user := j.authenticate(c)
+	c.Set(j.userKey, user)
+
+	return user
 }
 
 func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
@@ -396,7 +396,7 @@ func (j *jwtGuard) Login(c *gin.Context, user contracts.User) error {
 
 func (j *jwtGuard) Guest() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if j.user(c) != nil {
+		if j.User(c) != nil {
 			if j.redirectIfAuthenticated == nil {
 				c.AbortWithStatusJSON(http.StatusOK, gin.H{
 					"code": http.StatusConflict,
@@ -414,7 +414,7 @@ func (j *jwtGuard) Guest() gin.HandlerFunc {
 
 func (j *jwtGuard) Check() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if j.user(c) == nil {
+		if j.User(c) == nil {
 			if j.redirectIfUnauthenticated == nil {
 				c.AbortWithStatusJSON(http.StatusOK, gin.H{
 					"code": http.StatusUnauthorized,

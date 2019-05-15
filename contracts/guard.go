@@ -11,5 +11,5 @@ type Guard interface {
 
 	Login(*gin.Context, User) error
 
-	Authenticate(*gin.Context) User
+	User(*gin.Context) User
 }

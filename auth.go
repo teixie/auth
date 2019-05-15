@@ -27,6 +27,10 @@ func (g guard) Login(c *gin.Context, user contracts.User) error {
 	return g.driver.Login(c, user)
 }
 
+func (g guard) User(c *gin.Context) contracts.User {
+	return g.driver.User(c)
+}
+
 // Register driver.
 func RegisterDriver(driverName string, driver func(interface{}) contracts.Guard) {
 	drivers[driverName] = driver
